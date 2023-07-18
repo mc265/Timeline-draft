@@ -1,98 +1,288 @@
-Highcharts.chart('container', {
-    chart: {
-        type: 'timeline',
-        inverted: true
+const startYear = 1961,
+    endYear = 2021,
+    btn = document.getElementById('play-pause-button'),
+    input = document.getElementById('play-range'),
+    nbr = 20;
+
+let dataset, chart;
+
+
+/*
+ * Animate dataLabels functionality
+ */
+(function (H) {
+    const FLOAT = /^-?\d+\.?\d*$/;
+
+    // Add animated textSetter, just like fill/strokeSetters
+    H.Fx.prototype.textSetter = function () {
+        let startValue = this.start.replace(/ /g, ''),
+            endValue = this.end.replace(/ /g, ''),
+            currentValue = this.end.replace(/ /g, '');
+
+        if ((startValue || '').match(FLOAT)) {
+            startValue = parseInt(startValue, 10);
+            endValue = parseInt(endValue, 10);
+
+            // No support for float
+            currentValue = Highcharts.numberFormat(
+                Math.round(startValue + (endValue - startValue) * this.pos),
+                0
+            );
+        }
+
+        this.elem.endText = this.end;
+
+        this.elem.attr(this.prop, currentValue, null, true);
+    };
+
+    // Add textGetter, not supported at all at this moment:
+    H.SVGElement.prototype.textGetter = function () {
+        const ct = this.text.element.textContent || '';
+        return this.endText ? this.endText : ct.substring(0, ct.length / 2);
+    };
+
+    // Temporary change label.attr() with label.animate():
+    // In core it's simple change attr(...) => animate(...) for text prop
+    H.wrap(H.Series.prototype, 'drawDataLabels', function (proceed) {
+        const attr = H.SVGElement.prototype.attr,
+            chart = this.chart;
+
+        if (chart.sequenceTimer) {
+            this.points.forEach(point =>
+                (point.dataLabels || []).forEach(
+                    label =>
+                        (label.attr = function (hash) {
+                            if (hash && hash.text !== undefined) {
+                                const text = hash.text;
+
+                                delete hash.text;
+
+                                return this
+                                    .attr(hash)
+                                    .animate({ text });
+                            }
+                            return attr.apply(this, arguments);
+
+                        })
+                )
+            );
+        }
+
+        const ret = proceed.apply(
+            this,
+            Array.prototype.slice.call(arguments, 1)
+        );
+
+        this.points.forEach(p =>
+            (p.dataLabels || []).forEach(d => (d.attr = attr))
+        );
+
+        return ret;
+    });
+}(Highcharts));
+
+
+function getData(year) {
+    const output = Object.entries(dataset)
+        .map(country => {
+            const [countryName, countryData] = country;
+            return [countryName, Number(countryData[year])];
+        })
+        .sort((a, b) => b[1] - a[1]);
+    return [output[0], output.slice(0, nbr)];
+}
+
+function getSubtitle() {
+    const population = (getData(input.value)[0][1] / 1).toFixed(0);
+    return `<span style="font-size: 80px">${input.value}</span>
+        <br>
+        <span style="font-size: 22px">
+            Total: <b>: ${population}</b>m3
+        </span>`;
+}
+
+(async () => {
+
+    dataset = await fetch(
+        'https://raw.githubusercontent.com/mc265/Industrial-Roundwood-Production-over-Time/main/data%20for%20bar%20race.json'
+    ).then(response => response.json());
+
+
+    chart = Highcharts.chart('container', {
+        chart: {
+            animation: {
+                duration: 500
+            },
+            marginRight: 50
+        },
+        title: {
+            text: ' Industrial Roundwood Production',
+            align: 'left'
+        },
+        subtitle: {
+            useHTML: true,
+            text: getSubtitle(),
+            floating: true,
+            align: 'right',
+            verticalAlign: 'middle',
+            y: 50,
+            x: -100
+        },
+
+        legend: {
+            enabled: false
+        },
+ xAxis: { title: {
+            enabled: true,
+            text: ''
+        },
+       
+            type: 'category' 
+         },  
+     
+
+        yAxis: {
+            opposite: true,
+            tickPixelInterval: 150,
+            min:0,
+            max:300000000,
+            tickInterval: 50000000,
+            title: {
+                text: 'Production(m3)'
+            }
+        },
+        plotOptions: {
+            series: {
+                animation: false,
+                groupPadding: 0,
+                pointPadding: 0.1,
+                borderWidth: 0,
+                colorByPoint: true,
+                dataSorting: {
+                    enabled: true,
+                    matchByName: true
+                },
+                type: 'bar',
+                dataLabels: {
+                    enabled: true
+                }
+            }
+        },
+       
+       
+     
+        series: [
+            {
+                type: 'bar',
+                name: startYear,
+                data: getData(startYear)[1]
+            }
+        ],
+         credits: {
+        enabled: false
     },
-    colors: [
-    '#4185F3',
-    '#427CDD',
-    '#406AB2',
-    '#3E5A8E',
-    '#3B4A68',
-    '#363C46'
-  ],
-    title: {
-        text: 'Timeline of FAO Forest Products Statistics'
-    },
-    subtitle: {
-        text: 'Info source: <a href="https://www.fao.org/forestry/statistics/80577/en/">forest product statistics</a>'
-    },
-    
-    tooltip: {
-		useHTML: true
-	},
-    xAxis: {
-        visible: false
-    },
-    scrollbar: {
+      scrollbar: {
             enabled: true
         },
-    yAxis: {
-        visible: false
-    },
-    series: [{
-        data: [ {
-            name: 'Yearbook publication',
-            label: '1947:<a href="https://www.fao.org/forestry/statistics/80570/en/">first ever yearbook</a>',
-            description: '<img src="https://www.fao.org/3/AM447B/am447b00.jpg" alt="test"/>'
-        }, {
-            name: 'European timber statistics:1913_1950',
-            label: '1953:<a href="https://unece.org/DAM/timber/docs/etts/53.II.E.5_ENG_1953_European_Timber_Statistics_1913-1950.pdf">UNECE website publication</a>',
-            description: '<img src="https://unece.org/sites/default/files/styles/max_2600x2600/public/datastore/migrated_files/publications/DAM/timber/docs/etts/European_Timber_Statistics_1913-1950-cover.JPG?itok=T-KaXAWp" alt="test"/>'},
-            {
-            name: 'Pulp and paper publication',
-            label: '1968:<a href="https://www.fao.org/forestry/statistics/80571/en/">first publication</a>',
-            description: '<img src="https://m.media-amazon.com/images/I/41W5AMZjQjL._SX350_BO1,204,203,200_.jpg" alt="test"/>'
-        }, 
-                {
-            name: 'Classification of forest products',
-            label: '1982:<a href="https://data.apps.fao.org/catalog/dataset/classification-of-forest-products">first ever classified</a>',
-            description: '<img src="https://m.media-amazon.com/images/I/41k2jtHb06L._SX350_BO1,204,203,200_.jpg" alt="test"/>'},
-                {
-            name: 'Capacity building on data collection',
-            label: '1984:wider reach of data',
-            description: '<img src="https://www.fao.org/uploads/pics/Data_collection.jpg" alt="test"/>'},
- 
-            {
-            name: 'Intersecretariat Working Group(IWG) on forest products formed',
-            label: '1994: <a href="https://www.fao.org/forestry/statistics/iwg/en/">forest product statistics</a>',
-            description: '<img src="https://www.fao.org/forestry/36245-093a2c444d82f187de60e357bf2827928.jpg" alt="test"/>'
-           
-},   
-                 {
-            name: 'Cross-laminated timber introduced',
-            label: 'Early 1990s:new forest product',
-                    description: '<img src="https://cascadebusnews.com/wp-content/uploads/2022/07/Morrison-Maierle.jpg" alt="test"/>'
-                 },
-                         {
-            name: 'FAOSTAT forestry database',
-            label: '1995:database for access',
-                    description: ''
-                 },
-          
-                {    name: 'Launch of JFSQ',
-            label: '1997: <a href="https://unece.org/forests/jfsq">Joint Forest Sector Questionnaire</a>',
-            description: ''},
-                      {    name: 'Forest Product Statistics  website in 6 languages',
-            label: '2012: <a href="https://www.fao.org/forestry/statistics/en/">The FPS website</a>',
-            description: ''   },
-              {    name: 'Facts and figures published ',
-            label: '2014: <a href="https://www.fao.org/forestry/statistics/en/">The FPS website</a>',
-            description: '' },
-               {    name: '53 meter building of engineered wood built',
-            label: '2017: <a href="https://www.dezeen.com/2023/03/29/worlds-tallest-buildings-mass-timber-revolution/ ">The building</a>',
-            description: '<img src="https://static.dezeen.com/uploads/2022/08/ascent-tower-by-korb-associates-architects-milwaukee_dezeen_2364_col_hero-1.jpg"alt="test"/>',
-            useHTML: true,
-      url: 'https://www.google.com/'},
-               {    name: 'non-wood forest products ',
-            label: '2017: <a href="https://www.fao.org/3/i6731e/i6731e.pdf">in international statistical classification systems</a>',
-            description: '' },
-               {    name: 'Use of SWS cloubased database ',
-            label: '2019/20: <a href="https://www.fao.org/faostat/en/#data/FO">data in FAOSTAT</a>',
-            description: '' },   {    name: '73 meter CLT building in Netherlands ',
-            label: '2022: <a href="https://www.dezeen.com/2023/03/29/worlds-tallest-buildings-mass-timber-revolution/">The building</a>',
-            description: '' 
-        }]
-    }]
+
+        responsive: {
+            rules: [{
+                condition: {
+                    maxWidth: 550
+                },
+                chartOptions: {
+                    xAxis: {
+                        visible: true
+                    },
+                    subtitle: {
+                        x: 0
+                    },
+                    plotOptions: {
+                        series: {
+                            dataLabels: [{
+                                enabled: true,
+                                y: 8
+                            }, {
+                                enabled: true,
+                                format: '{point.name}',
+                                y: -8,
+                                style: {
+                                    fontWeight: 'normal',
+                                    opacity: 0.7
+                                }
+                            }]
+                        }
+                    }
+                }
+            }]
+        }
+    });
+})();
+
+/*
+ * Pause the timeline, either when the range is ended, or when clicking the pause button.
+ * Pausing stops the timer and resets the button to play mode.
+ */
+function pause(button) {
+    button.title = 'play';
+    button.className = 'fa fa-play';
+    clearTimeout(chart.sequenceTimer);
+    chart.sequenceTimer = undefined;
+}
+
+/*
+ * Update the chart. This happens either on updating (moving) the range input,
+ * or from a timer when the timeline is playing.
+ */
+function update(increment) {
+    if (increment) {
+        input.value = parseInt(input.value, 10) + increment;
+    }
+    if (input.value >= endYear) {
+        // Auto-pause
+        pause(btn);
+    }
+
+    chart.update(
+        {
+            subtitle: {
+                text: getSubtitle()
+            }
+        },
+        true,
+        true,
+        true
+    );
+
+    chart.series[0].update({
+        name: input.value,
+        data: getData(input.value)[1]
+    });
+}
+
+/*
+ * Play the timeline.
+ */
+function play(button) {
+    button.title = 'pause';
+    button.className = 'fa fa-pause';
+    chart.sequenceTimer = setInterval(function () {
+        update(1);
+    }, 1000);
+}
+
+btn.addEventListener('click', function () {
+    if (chart.sequenceTimer) {
+        pause(this);
+    } else {
+        play(this);
+    }
 });
+/*
+ * Trigger the update on the range bar click.
+ */
+input.addEventListener('click', function () {
+    update();
+});
+
 
