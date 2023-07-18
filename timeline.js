@@ -96,3 +96,4 @@ Highcharts.chart('container', {
   
     }]
 
+});
